@@ -82,10 +82,12 @@ def is_comment_in_hunk(hunk_start_line, comment_position, hunk_end_line):
 
 def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullRequest]):
     diffs_and_comments = []
-    
+    i, approved_prs_count = 0, len(approved_prs)
+
     for pr in approved_prs:
         pr_title = pr.title
-        print(f"\n\nProcessing PR: {pr_title}")
+        i += 1
+        print(f"\n\nProcessing PR ({i}/{approved_prs_count}): {pr_title}")
 
         review_comments = pr.get_review_comments()
         if review_comments.totalCount == 0:
