@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv
 import pickle
 from typing import List
+from logger import logger
 
 auth = None
 user = None
@@ -96,7 +97,10 @@ def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullReques
         for file in files:
             if any(file.filename.endswith(ext) for ext in constants.ALLOWED_FILE_EXTENSIONS):
                 patch = file.patch
-                hunks = extract_hunks(patch)
+                if patch:
+                    hunks = extract_hunks(patch)
+                else:
+                    print("PATCH IS NONE")
 
                 for header, content in hunks:
                     hunk_start_line = get_hunk_start_line(header)
@@ -132,10 +136,13 @@ def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullReques
                         for commit_file in commit_files:
                             if commit_file.filename == file.filename:
                                 # More robust presence check can be implemented here, i.e, adding the commit message only it the code diff was made in its corresponding commit
-                                if commit_file.patch and commit_file.patch in content.strip():
+                                # Or simply look for a % overlap bw the content and the commit msg
+                                if commit_file.patch and (commit_file.patch in content.strip() or content.strip() in commit_file.patch):
+                                    print("\n\nMatch between content and commit patch IS found")
                                     hunk_info["commit_messages"].append(commit.commit.message)
                                 else:
-                                    print(f"DEBUG log: \nCommit file patch: {commit_file.patch}\ncontent.strip: {content.strip()}")
+                                    print("\n\nMatch between content and commit patch NOT found")
+                                    logger.debug(f"\nCommit file patch: {commit_file.patch}\ncontent.strip: {content.strip()}")
 
                     print("Hunk info: ", hunk_info)
                     diffs_and_comments.append(hunk_info)

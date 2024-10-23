@@ -1,4 +1,5 @@
 .env
+app.log
 /src/__pycache__/
 acr_project/
 saved_objs/

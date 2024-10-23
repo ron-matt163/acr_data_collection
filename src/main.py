@@ -1,8 +1,10 @@
 import helper
 import github_helper
 import constants
+from logger import init_logger
 
 if __name__ == "__main__":
+    init_logger()
     repo_names = helper.get_repo_names_from_file(constants.REPO_LIST_FILENAME)
     github_helper.authenticate_github()
     print(f"Repo for which PRs are going to be pulled: {repo_names[20]}\n\n")
