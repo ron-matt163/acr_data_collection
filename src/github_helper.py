@@ -44,7 +44,7 @@ def fetch_approved_PRs_from_repo(repo_name: str):
         return None
     
     try:
-        with open('../saved_objs/approved_prs.pkl', 'rb') as f:
+        with open(f'../saved_objs/{repo_name}/approved_prs.pkl', 'rb') as f:
             approved_prs = pickle.load(f)
             print("Loaded approved PRs from file.")
             return approved_prs
@@ -65,7 +65,8 @@ def fetch_approved_PRs_from_repo(repo_name: str):
                     print("Approved PR found: ", len(approved_prs))
                     break
 
-    with open('../saved_objs/approved_prs.pkl', 'wb') as f:
+    os.makedirs("../saved_objs/{repo_name}", exist_ok=True)
+    with open('../saved_objs/{repo_name}/approved_prs.pkl', 'wb') as f:
         pickle.dump(approved_prs, f)
         print("Saved approved PRs to file.")            
 
@@ -75,6 +76,8 @@ def fetch_approved_PRs_from_repo(repo_name: str):
 def is_comment_in_hunk(hunk_start_line, comment_position, hunk_end_line):
     if None in (hunk_start_line, comment_position, hunk_end_line):
         print("None found in is_comment_in_hunk", hunk_start_line, comment_position, hunk_end_line)
+        if comment_position is not None:
+            return True
         return False
 
     return hunk_start_line <= comment_position <= hunk_end_line
