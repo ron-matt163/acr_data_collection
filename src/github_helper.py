@@ -5,6 +5,7 @@ from helper import extract_hunks, get_hunk_start_line
 import constants
 import os
 from dotenv import load_dotenv
+import pickle
 from typing import List
 
 auth = None
@@ -40,6 +41,15 @@ def fetch_approved_PRs_from_repo(repo_name: str):
     else:
         print("auth is None")
         return None
+    
+    try:
+        with open('../saved_objs/approved_prs.pkl', 'rb') as f:
+            approved_prs = pickle.load(f)
+            print("Loaded approved PRs from file.")
+            return approved_prs
+    except FileNotFoundError as fe:
+        print("Approved PRs pickle not found: ", str(fe))
+        approved_prs = []
 
     pulls = repo.get_pulls(state='closed')  # Only closed PRs can be approved
     approved_prs = []
@@ -53,8 +63,20 @@ def fetch_approved_PRs_from_repo(repo_name: str):
                     approved_prs.append(pr)
                     print("Approved PR found: ", len(approved_prs))
                     break
-            
+
+    with open('../saved_objs/approved_prs.pkl', 'wb') as f:
+        pickle.dump(approved_prs, f)
+        print("Saved approved PRs to file.")            
+
     return approved_prs
+
+
+def is_comment_in_hunk(hunk_start_line, comment_position, hunk_end_line):
+    if None in (hunk_start_line, comment_position, hunk_end_line):
+        print("None found in is_comment_in_hunk", hunk_start_line, comment_position, hunk_end_line)
+        return False
+
+    return hunk_start_line <= comment_position <= hunk_end_line
 
 
 def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullRequest]):
@@ -67,6 +89,7 @@ def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullReques
         review_comments = pr.get_review_comments()
         if review_comments.totalCount == 0:
             continue
+        print(f"Review comments found in {pr_title}")
         commits = pr.get_commits()
         files = pr.get_files()
 
@@ -92,12 +115,12 @@ def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullReques
 
                     if hunk_start_line:
                         # Calculate the ending line number based on the content
-                        hunk_lines_length = len(content.split('\n'))
+                        hunk_lines_length = len(content.strip().split('\n'))
                         hunk_end_line = hunk_start_line + hunk_lines_length - 1
 
                         for comment in review_comments:
-                            if (comment.path == file.filename and
-                                hunk_start_line <= comment.position <= hunk_end_line):
+                            if (comment.path == file.filename and is_comment_in_hunk(hunk_start_line, comment.position, hunk_end_line)):
+                                print("\n\n\nREVIEW COMMENT FOUND!!!")
                                 # we could remove comment.position later after verifying that no errors are occurring
                                 hunk_info["comments"].append({
                                     "comment": comment.body,
@@ -109,9 +132,12 @@ def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullReques
                         for commit_file in commit_files:
                             if commit_file.filename == file.filename:
                                 # More robust presence check can be implemented here, i.e, adding the commit message only it the code diff was made in its corresponding commit
-                                if content.strip() in commit_file.patch:
+                                if commit_file.patch and commit_file.patch in content.strip():
                                     hunk_info["commit_messages"].append(commit.commit.message)
+                                else:
+                                    print(f"DEBUG log: \nCommit file patch: {commit_file.patch}\ncontent.strip: {content.strip()}")
 
+                    print("Hunk info: ", hunk_info)
                     diffs_and_comments.append(hunk_info)
     
     return diffs_and_comments
