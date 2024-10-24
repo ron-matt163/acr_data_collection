@@ -8,22 +8,22 @@ def get_repo_names_from_file(filename):
     df = pd.read_excel(filename, sheet_name='Result 1')
     return df['repo_full_name'].tolist()
 
-def get_hunk_start_line(hunk_header):
-    match = re.match(r'@@ -\d+,\d+ \+(\d+),\d+ @@', hunk_header)
+def get_code_diff_start_line(code_diff_header):
+    match = re.match(r'@@ -\d+,\d+ \+(\d+),\d+ @@', code_diff_header)
     if match:
         return int(match.group(1))  # Returns the starting line in the "new" version of the file
     return None
 
-def extract_hunks(patch):
-    hunks = []
-    # Regular expression to capture the hunk header and content
+def extract_code_diffs(patch):
+    code_diffs = []
+    # Regular expression to capture the code_diff header and content
     pattern = re.compile(r'(@@ -\d+,\d+ \+\d+,\d+ @@)(.*?)\n(?=(@@|\Z))', re.DOTALL)
     matches = pattern.findall(patch)
     for match in matches:
         header = match[0]
         content = match[1].strip()
-        hunks.append((header, content))
-    return hunks
+        code_diffs.append((header, content))
+    return code_diffs
 
 def write_json_to_file(data, file_path):
     """
