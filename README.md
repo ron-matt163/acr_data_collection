@@ -1,13 +1,13 @@
 # Automated Code Reviewer
 This repository contains code to collect additional commit-related and function-related context for code review data from PRs.
 
-## Strategy followed for adding commit-related context:
+## Strategy followed for adding commit-related context (outdated, update later. Check TODO (below, for the updated strategy)):
 1. For each repository in the list given in /data/Projects.xlsx, maintain a list of PRs that are approved (since these are more likely to have review comments in them).
 2. Initialize Data Storage: Create a structure to hold information about code changes, comments, and commit messages.
 3. Process Each Approved Pull Request: For each approved pull request, retrieve its title and prepare to gather relevant information.
 4. Fetch Associated Data: Obtain the list of commits and review comments associated with the pull request. Identify the files that have been modified in the pull request.
 5. Filter Relevant Files: For each modified file, check if it is of a type that is relevant to the analysis.
-6. Extract Code Changes: Break down the file's changes into sections (hunks) that represent specific code modifications.
+6. Extract Code Changes: Break down the file's changes into sections (code_diffs) that represent specific code modifications.
 7. Analyze Each Code Change Section: For each section of code changes: Determine where the changes begin in the new version of the file. If the section is not empty, prepare to collect information about it.
 8. Determine Comment Associations: Check each review comment to see if it refers to the specific section of code changes. If so, associate the comment with that section.
 9. Identify Related Commit Messages: For each commit related to the pull request, check if the specific code changes are included in that commit. If they are, link the commit message to the section of code changes.
@@ -23,3 +23,7 @@ GITHUB_ACCESS_TOKEN=<your token>
 3. Go inside the src/ directory and run main.py (`cd src && python3 main.py`)
 
 The list of repositories from which the data is going to be collected was obtained from https://github.com/aiopsplus/Carllm
+
+
+TODO:
+1. Some major changes would have to be made in the review comment and commit message extraction logic. Create a dictionary that maps the commit message corresponding to a review comment to the list of review comments (the comment body, position and file) under that commit. Iterate through the commit IDs in this dictionary to find overlaps between code diffs in each of these commits and the review comment position. If such an overlap exists, the code diff entry would have both: review comments and a commit message, resolving our current problems.

@@ -1,4 +1,4 @@
-from github import Github, GithubException, BadCredentialsException, PullRequest, File, PaginatedList, PullRequestComment, Commit
+from github import Github, GithubException, BadCredentialsException, PullRequest, File, PaginatedList, PullRequestComment, Commit, PullRequestComment
 # Authentication is defined via github.Auth
 from github import Auth
 from helper import extract_code_diffs, get_code_diff_start_line
@@ -75,14 +75,25 @@ def fetch_approved_PRs_from_repo(repo_name: str):
     return approved_prs
 
 
-def is_comment_in_code_diff(code_diff_start_line, comment_position, code_diff_end_line):
+def is_comment_in_code_diff(code_diff_file, comment_file, code_diff_start_line, comment_position, code_diff_end_line):
+    if code_diff_file != comment_file:
+        return False
     if None in (code_diff_start_line, comment_position, code_diff_end_line):
         print("None found in is_comment_in_code_diff", code_diff_start_line, comment_position, code_diff_end_line)
-        if comment_position is not None:
+        if comment_position is None:
             return True
         return False
 
     return code_diff_start_line <= comment_position <= code_diff_end_line
+
+
+def get_commits_by_ids(commits: PaginatedList.PaginatedList[Commit.Commit], commit_ids: List[str]) -> List[Commit.Commit]:
+    filtered_commits = []
+    for commit in commits:
+        if commit.sha in commit_ids:
+            filtered_commits.append(commit)
+
+    return filtered_commits
 
 
 def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullRequest]):
@@ -94,6 +105,8 @@ def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullReques
         i += 1
         pr_title = pr.title
         pr_number = pr.number
+        # A dictionary that maps commits to the review comments made at that point.
+        commit_to_review_comment = {}
         print(f"\n\nProcessing PR ({i}/{approved_prs_count}): {pr_title}")
 
         # Skip if there are no review comments
@@ -101,51 +114,45 @@ def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullReques
         if not review_comments.totalCount:
             continue
 
-        commits = pr.get_commits()
-        files = pr.get_files()
+        for review_comment in review_comments:
+            commit_to_review_comment[review_comment.commit_id] = commit_to_review_comment.get(review_comment.commit_id, []) + [{"body": review_comment.body, "position": review_comment.position, "file_name": review_comment.path}]
 
-        for file in files:
-            if any(file.filename.endswith(ext) for ext in constants.ALLOWED_FILE_EXTENSIONS):
-                diffs_and_comments.extend(process_file_in_pr(file, pr_title, pr_number, review_comments, commits))
+        commits = pr.get_commits()
+        diffs_and_comments.extend(process_commits_in_pr(commit_to_review_comment, pr_title, pr_number, review_comments, commits))
+
     
     return diffs_and_comments
 
-
-def process_file_in_pr(file: File.File, pr_title: str, pr_number: int, review_comments: PaginatedList.PaginatedList[PullRequestComment.PullRequestComment], commits: PaginatedList.PaginatedList[Commit.Commit]):
-    """
-    Process a single file in the PR: extract code diffs, handle comments, and match commit messages.
-    """
+def process_commits_in_pr(commit_to_review_comment: dict, pr_title: str, pr_number: int, review_comments: PaginatedList.PaginatedList[PullRequestComment.PullRequestComment], commits: PaginatedList.PaginatedList[Commit.Commit]):
+    commits_with_review_comments = get_commits_by_ids(commits, list(commit_to_review_comment.keys()))
     diffs_and_comments = []
-    patch = file.patch
-    if not patch:
-        print("PATCH IS NONE")
-        return []
 
-    code_diffs = extract_code_diffs(patch)
-    for header, content in code_diffs:
-        # Skip empty diffs
-        if not content.strip():
-            continue
+    for commit in commits_with_review_comments:
+        for file in commit.files:
+            patch = file.patch
+            if not file.patch:
+                print("PATCH IS NONE")
+                return []
+            
+            code_diffs = extract_code_diffs(patch)
+            for header, content in code_diffs:
+                # Skip empty diffs
+                if not content.strip():
+                    continue                
         
-        code_diff_info = create_code_diff_info(header, content, pr_title, pr_number, file.filename)
+                code_diff_info = create_code_diff_info(header, content, pr_title, pr_number, file.filename, commit.sha, commit.commit.message)
+                code_diff_start_line = get_code_diff_start_line(header)
+                if code_diff_start_line:
+                    code_diff_end_line = code_diff_start_line + len(content.strip().split('\n')) - 1
+                    code_diff_info = add_comments_to_code_diff(commit.sha, code_diff_start_line, code_diff_end_line, commit_to_review_comment, code_diff_info)
+                    diffs_and_comments.append(code_diff_info)
 
-        # Handle review comments
-        code_diff_start_line = get_code_diff_start_line(header)
-        if code_diff_start_line:
-            code_diff_end_line = code_diff_start_line + len(content.strip().split('\n')) - 1
-            add_comments_to_code_diff(review_comments, code_diff_start_line, code_diff_end_line, code_diff_info, file.filename)
-
-        # Handle commits
-        last_commit_sha = add_commits_to_code_diff(commits, content, file.filename, code_diff_info)
-        code_diff_info["last_commit_sha"] = last_commit_sha
-
-        diffs_and_comments.append(code_diff_info)
-        print("\n\nAdded code diff:\n", code_diff_info)
+                    print("Adding entry: ", code_diff_info)   
 
     return diffs_and_comments
 
 
-def create_code_diff_info(header: str, content: str, pr_title: str, pr_number: int, file_name: str):
+def create_code_diff_info(header: str, content: str, pr_title: str, pr_number: int, file_name: str, commit_id: str, commit_msg: str):
     """
     Create a dictionary to store code diff information.
     """
@@ -155,21 +162,24 @@ def create_code_diff_info(header: str, content: str, pr_title: str, pr_number: i
         "file_name": file_name,
         "code_diff": f"{header}\n{content}",
         "comments": [],
-        "commit_messages": [],
+        "commit_messages": commit_msg,
+        "commit_id": commit_id
     }
 
 
-def add_comments_to_code_diff(review_comments: PaginatedList.PaginatedList[PullRequestComment.PullRequestComment], code_diff_start_line: int, code_diff_end_line: int, code_diff_info: dict, file_name: str):
+def add_comments_to_code_diff(commit_id: str, code_diff_start_line: int, code_diff_end_line: int, commit_to_review_comment: dict, code_diff_info: dict):
     """
     Add comments to a code diff if the comment's position matches the diff's lines.
     """
-    for comment in review_comments:
-        if (comment.path == file_name and is_comment_in_code_diff(code_diff_start_line, comment.position, code_diff_end_line)):
-            print("\n\n\nREVIEW COMMENT FOUND!!!")
-            code_diff_info["comments"].append({
-                "comment": comment.body,
-                "position": comment.position
-            })
+    comments_in_commit = commit_to_review_comment.get(commit_id)
+
+    for comment in comments_in_commit:
+        if is_comment_in_code_diff(code_diff_info["file_name"], comment["file_name"], code_diff_start_line, comment["position"], code_diff_end_line):
+            print("Found a review comment")
+            code_diff_info["comments"].append({"comment": comment["body"], "position": comment["position"]})
+
+    return code_diff_info
+
 
 def monitor_rate_limit():
     global auth
@@ -195,20 +205,20 @@ def monitor_rate_limit():
         print(f"Rate limit OK. Remaining requests: {rate_limit.remaining}")
 
 
-def add_commits_to_code_diff(commits: PaginatedList.PaginatedList[Commit.Commit], content: str, file_name: str, code_diff_info: dict):
-    """
-    Add commit messages to a code diff if the commit affects the diff.
-    """
-    last_commit_sha = None
-    for commit in commits:
-        last_commit_sha = commit.sha
-        commit_files = commit.files
-        for commit_file in commit_files:
-            if commit_file.filename == file_name:
-                if commit_file.patch and (commit_file.patch in content.strip() or content.strip() in commit_file.patch):
-                    print("\n\nMatch between content and commit patch IS found")
-                    code_diff_info["commit_messages"].append(commit.commit.message)
-                else:
-                    print("\n\nMatch between content and commit patch NOT found")
-                    logger.debug(f"\nCommit file patch: {commit_file.patch}\ncontent.strip: {content.strip()}")
-    return last_commit_sha
+# def add_commits_to_code_diff(commits: List[Commit.Commit], content: str, file_name: str, code_diff_info: dict):
+#     """
+#     Add commit messages to a code diff if the commit affects the diff.
+#     """
+#     last_commit_sha = None
+#     for commit in commits:
+#         last_commit_sha = commit.sha
+#         commit_files = commit.files
+#         for commit_file in commit_files:
+#             if commit_file.filename == file_name:
+#                 if commit_file.patch and (commit_file.patch in content.strip() or content.strip() in commit_file.patch):
+#                     print("\n\nMatch between content and commit patch IS found")
+#                     code_diff_info["commit_messages"].append(commit.commit.message)
+#                 else:
+#                     print("\n\nMatch between content and commit patch NOT found")
+#                     logger.debug(f"\nCommit file patch: {commit_file.patch}\ncontent.strip: {content.strip()}")
+#     return last_commit_sha
