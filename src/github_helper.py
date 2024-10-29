@@ -1,7 +1,7 @@
 from github import Github, GithubException, BadCredentialsException, PullRequest, File, PaginatedList, PullRequestComment, Commit, PullRequestComment
 # Authentication is defined via github.Auth
 from github import Auth
-from helper import extract_code_diffs, get_code_diff_start_line
+from helper import extract_code_diffs, get_code_diff_start_line, has_allowed_extensions
 import constants
 import os
 from dotenv import load_dotenv
@@ -129,6 +129,9 @@ def process_commits_in_pr(commit_to_review_comment: dict, pr_title: str, pr_numb
 
     for commit in commits_with_review_comments:
         for file in commit.files:
+            if not has_allowed_extensions(file.filename, constants.ALLOWED_FILE_EXTENSIONS):
+                continue
+
             patch = file.patch
             if not file.patch:
                 print("PATCH IS NONE")
@@ -162,7 +165,7 @@ def create_code_diff_info(header: str, content: str, pr_title: str, pr_number: i
         "file_name": file_name,
         "code_diff": f"{header}\n{content}",
         "comments": [],
-        "commit_messages": commit_msg,
+        "commit_message": commit_msg,
         "commit_id": commit_id
     }
 
@@ -204,21 +207,3 @@ def monitor_rate_limit():
     else:
         print(f"Rate limit OK. Remaining requests: {rate_limit.remaining}")
 
-
-# def add_commits_to_code_diff(commits: List[Commit.Commit], content: str, file_name: str, code_diff_info: dict):
-#     """
-#     Add commit messages to a code diff if the commit affects the diff.
-#     """
-#     last_commit_sha = None
-#     for commit in commits:
-#         last_commit_sha = commit.sha
-#         commit_files = commit.files
-#         for commit_file in commit_files:
-#             if commit_file.filename == file_name:
-#                 if commit_file.patch and (commit_file.patch in content.strip() or content.strip() in commit_file.patch):
-#                     print("\n\nMatch between content and commit patch IS found")
-#                     code_diff_info["commit_messages"].append(commit.commit.message)
-#                 else:
-#                     print("\n\nMatch between content and commit patch NOT found")
-#                     logger.debug(f"\nCommit file patch: {commit_file.patch}\ncontent.strip: {content.strip()}")
-#     return last_commit_sha

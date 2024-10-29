@@ -15,6 +15,8 @@ if __name__ == "__main__":
     init_logger()
     repo_names = helper.get_repo_names_from_file(constants.REPO_LIST_FILENAME)
     github_helper.authenticate_github()
+
     create_dataset_for_repo(repo_names[20])
+    create_dataset_for_repo(repo_names[94])
     # for repo_name in repo_names:
     #     create_dataset_for_repo(repo_name)

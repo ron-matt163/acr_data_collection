@@ -76,3 +76,30 @@ def write_dicts_to_csv(data, file_path):
         print(f"Data successfully written to {file_path}")
     except Exception as e:
         print(f"An error occurred while writing to the file: {e}")
+
+
+def has_allowed_extensions(filepath, allowed_extensions):
+    for extension in allowed_extensions:
+        if not extension.startswith('.'):
+            extension = '.' + extension
+
+        if os.path.splitext(os.path.basename(filepath))[1].lower() == extension.lower():
+            return True
+
+    return False
+
+def detect_lang_from_extension(filepath):
+    extension = os.path.splitext(os.path.basename(filepath))[1].lower()
+
+    if extension == ".py":
+        return "python"
+    elif extension == ".cpp":
+        return "cpp"
+    elif extension == ".c":
+        return "c"
+    elif extension == ".java":
+        return "java"
+    elif extension == ".js":
+        return "javascript"
+    elif extension == ".go":
+        return "golang"
