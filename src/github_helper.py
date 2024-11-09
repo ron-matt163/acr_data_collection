@@ -207,3 +207,50 @@ def monitor_rate_limit():
     else:
         print(f"Rate limit OK. Remaining requests: {rate_limit.remaining}")
 
+
+def get_function_calls_from_diff(repo_name: str, file_path: str, commit_sha: str):
+    """
+    Analyzes a specific file in a commit to identify function calls.
+    
+    Args:
+        repo_name: Full repository name (e.g., "owner/repo")
+        file_path: Path to the file in the repository
+        commit_sha: The commit SHA to analyze
+    
+    Returns:
+        dict: Information about function calls in the diff
+    """
+    if not auth:
+        print("GitHub authentication required")
+        return None
+        
+    try:
+        repo = auth.get_repo(repo_name)
+        commit = repo.get_commit(commit_sha)
+        
+        # Get the specific file from the commit
+        file_content = None
+        for file in commit.files:
+            if file.filename == file_path:
+                if file.patch:
+                    file_content = file.patch
+                break
+                
+        if not file_content:
+            return None
+            
+        # Get the full file content at this commit
+        file_data = repo.get_contents(file_path, ref=commit_sha)
+        full_content = file_data.decoded_content.decode('utf-8')
+        
+        return {
+            'diff': file_content,
+            'full_file': full_content,
+            'commit_sha': commit_sha,
+            'file_path': file_path
+        }
+        
+    except Exception as e:
+        print(f"Error getting function calls: {str(e)}")
+        return None
+
