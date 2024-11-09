@@ -1,7 +1,7 @@
-from github import Github, GithubException, BadCredentialsException, PullRequest, File, PaginatedList, PullRequestComment, Commit, PullRequestComment
+from github import Github, GithubException, BadCredentialsException, PullRequest, PaginatedList, PullRequestComment, Commit, PullRequestComment, Repository
 # Authentication is defined via github.Auth
 from github import Auth
-from helper import extract_code_diffs, get_code_diff_start_line, has_allowed_extensions
+from helper import extract_code_diffs, get_code_diff_start_line, has_allowed_extensions, extract_function_from_full_content, detect_lang_from_extension
 import constants
 import os
 from dotenv import load_dotenv
@@ -103,6 +103,7 @@ def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullReques
     for pr in approved_prs:
         monitor_rate_limit()
         i += 1
+        repo = pr.base.repo
         pr_title = pr.title
         pr_number = pr.number
         # A dictionary that maps commits to the review comments made at that point.
@@ -118,12 +119,11 @@ def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullReques
             commit_to_review_comment[review_comment.commit_id] = commit_to_review_comment.get(review_comment.commit_id, []) + [{"body": review_comment.body, "position": review_comment.position, "file_name": review_comment.path}]
 
         commits = pr.get_commits()
-        diffs_and_comments.extend(process_commits_in_pr(commit_to_review_comment, pr_title, pr_number, review_comments, commits))
-
-    
+        diffs_and_comments.extend(process_commits_in_pr(repo, commit_to_review_comment, pr_title, pr_number, review_comments, commits))
+   
     return diffs_and_comments
 
-def process_commits_in_pr(commit_to_review_comment: dict, pr_title: str, pr_number: int, review_comments: PaginatedList.PaginatedList[PullRequestComment.PullRequestComment], commits: PaginatedList.PaginatedList[Commit.Commit]):
+def process_commits_in_pr(repo: Repository.Repository, commit_to_review_comment: dict, pr_title: str, pr_number: int, review_comments: PaginatedList.PaginatedList[PullRequestComment.PullRequestComment], commits: PaginatedList.PaginatedList[Commit.Commit]):
     commits_with_review_comments = get_commits_by_ids(commits, list(commit_to_review_comment.keys()))
     diffs_and_comments = []
 
@@ -148,6 +148,7 @@ def process_commits_in_pr(commit_to_review_comment: dict, pr_title: str, pr_numb
                 if code_diff_start_line:
                     code_diff_end_line = code_diff_start_line + len(content.strip().split('\n')) - 1
                     code_diff_info = add_comments_to_code_diff(commit.sha, code_diff_start_line, code_diff_end_line, commit_to_review_comment, code_diff_info)
+                    code_diff_info = add_function_context_to_code_diff(code_diff_info, code_diff_start_line, code_diff_end_line, repo, file.filename, detect_lang_from_extension(file.filename))
                     diffs_and_comments.append(code_diff_info)
 
                     print("Adding entry: ", code_diff_info)   
@@ -207,3 +208,38 @@ def monitor_rate_limit():
     else:
         print(f"Rate limit OK. Remaining requests: {rate_limit.remaining}")
 
+# Fetches file content of a particular file at any given commit. The commit ID of the required 
+# should be passed to the `ref` parameter
+def get_file_content(repo: Repository.Repository, file_path: str, ref='main') -> str:
+    """Fetch the full content of a file from the repository."""
+    file_content = repo.get_contents(file_path, ref=ref)
+    return file_content.decoded_content.decode('utf-8')
+
+
+def add_function_context_to_code_diff(code_diff: dict, code_diff_start_line: int, code_diff_end_line: int, repo: Repository.Repository, file_path: str, language: str):
+    if len(code_diff["comments"]) > 0:
+        code_diff["fn_context"] = extract_function_code(repo, file_path, code_diff["commit_id"], code_diff_start_line, code_diff_end_line, language)
+
+    return code_diff
+
+def extract_function_code(repo: Repository.Repository, file_path: str, commit_sha: str, code_diff_start_line: int, code_diff_end_line: int, language: str) -> List[str]:
+    """
+    Extract entire function code for each code diff header.
+
+    Parameters:
+    - repo: The GitHub repository object.
+    - file_patch: The patch content for the modified file.
+    - file_path: The path of the file in the repository.
+    - code_diff_headers: A list of code diff headers indicating the start of each diff.
+    - language: The programming language of the file.
+
+    Returns:
+    - A list of function codes as strings.
+    """
+    full_content = get_file_content(repo, file_path, commit_sha)
+    function_code = ""
+    
+    if code_diff_start_line and code_diff_end_line:
+        function_code = extract_function_from_full_content(full_content, code_diff_start_line, code_diff_end_line, language)
+    
+    return function_code
