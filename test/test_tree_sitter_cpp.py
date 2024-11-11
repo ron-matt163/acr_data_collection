@@ -36,7 +36,6 @@ def get_cpp_functions_in_range(code, start_line, end_line):
     # Traverse the tree to find functions
     def find_functions(node):
         # Check if node is a function
-        # print(node)
         if node.type == "function" or node.type == "function_declaration" or node.type == "method_declaration" or node.type == "function_definition":
             func_start = node.start_point[0] + 1  # Convert to 1-based line numbers
             func_end = node.end_point[0] + 1

@@ -217,8 +217,7 @@ def get_file_content(repo: Repository.Repository, file_path: str, ref='main') ->
 
 
 def add_function_context_to_code_diff(code_diff: dict, code_diff_start_line: int, code_diff_end_line: int, repo: Repository.Repository, file_path: str, language: str):
-    if len(code_diff["comments"]) > 0:
-        code_diff["fn_context"] = extract_function_code(repo, file_path, code_diff["commit_id"], code_diff_start_line, code_diff_end_line, language)
+    code_diff["fn_context"] = extract_function_code(repo, file_path, code_diff["commit_id"], code_diff_start_line, code_diff_end_line, language)
 
     return code_diff
 

@@ -1,0 +1,12 @@
+[
+    {
+        "pr_title": "Support pfx passphrase",
+        "pr_number": 1104,
+        "file_name": "lib/server/utils.js",
+        "code_diff": "@@ -21,11 +21,13 @@\nvar utils = {\n     },\n     /**\n      * @param filePath\n+     * @param passphrase\n      * @returns {{pfx}}\n      */\n-    getPFX: function (filePath) {\n+    getPFX: function (filePath, passphrase) {\n         return {\n-            pfx: fs.readFileSync(filePath)\n+            pfx: fs.readFileSync(filePath),\n+            passphrase: passphrase,\n         };\n     },\n     /**",
+        "comments": [],
+        "commit_message": "Support pfx passphrase",
+        "commit_id": "fbd85deccf8bf46ac3b7cb83283e61963243f177",
+        "fn_context": "    getKeyAndCert: function (options) {\n        return {\n            key:  fs.readFileSync(options.getIn([\"https\", \"key\"])  || filePath.join(__dirname, \"certs/server.key\")),\n            cert: fs.readFileSync(options.getIn([\"https\", \"cert\"]) || filePath.join(__dirname, \"certs/server.crt\"))\n        };\n    },\n\n    getPFX: function (filePath, passphrase) {\n        return {\n            pfx: fs.readFileSync(filePath),\n            passphrase: passphrase,\n        };\n    },\n\n    getServer: function (app, options) {\n        return {\n            server: (function () {\n                if (options.get(\"scheme\") === \"https\") {\n                    var pfxPath = options.getIn([\"https\", \"pfx\"]);\n                    var pfxPassphrase = options.getIn([\"https\", \"pfxPassphrase\"]);\n                    return pfxPath ?\n                        https.createServer(utils.getPFX(pfxPath, pfxPassphrase), app) :\n                        https.createServer(utils.getKeyAndCert(options), app);\n                }\n                return http.createServer(app);\n            })(),\n            app: app\n        };\n    },"
+    }
+]

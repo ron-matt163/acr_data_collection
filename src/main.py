@@ -16,10 +16,10 @@ if __name__ == "__main__":
     github_helper.authenticate_github()
 
     # create_dataset_for_repo(repo_names[7])
-    create_dataset_for_repo(repo_names[20])
-    create_dataset_for_repo(repo_names[22])
-    create_dataset_for_repo(repo_names[33])
+    # create_dataset_for_repo(repo_names[20])
+    # create_dataset_for_repo(repo_names[22])
+    # create_dataset_for_repo(repo_names[33])
     create_dataset_for_repo(repo_names[37])
-    # create_dataset_for_repo(repo_names[94])
+    create_dataset_for_repo(repo_names[94])
     # for repo_name in repo_names:
     #     create_dataset_for_repo(repo_name)
