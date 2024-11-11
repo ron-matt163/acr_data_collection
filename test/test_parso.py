@@ -17,7 +17,7 @@ def get_python_functions_in_range(code, start_line, end_line):
 
     return functions_in_diff
 
-functions_in_diff = get_python_functions_in_range(file_contents, 965, 975)
+functions_in_diff = get_python_functions_in_range(file_contents, 846, 862)
 
 print(functions_in_diff)
 

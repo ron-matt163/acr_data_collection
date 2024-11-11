@@ -6,6 +6,7 @@ import csv
 from language_parser import LANGUAGE_MAP
 from typing import Union
 import tree_sitter
+import parso
 
 def get_repo_names_from_file(filename):
     df = pd.read_excel(filename, sheet_name='Result 1')
@@ -98,71 +99,69 @@ def detect_lang_from_extension(filepath):
     return extension_to_lang.get(extension, None)
 
 
-# def extract_function_from_full_content(language: str, file_content: str, code_diff_header: str) -> Union[str, None]:
-#     """
-#     Extracts the entire function code based on the language and code diff header.
+# Using parso
+def extract_python_functions_using_parso(code, start_line, end_line):
+    tree = parso.parse(code)
+    functions_in_diff = []
 
-#     Args:
-#         language (str): The programming language of the code.
-#         file_content (str): The full content of the file.
-#         code_diff_header (str): The header from the code diff containing line numbers.
+    for func in tree.iter_funcdefs():
+        func_start = func.start_pos[0]
+        func_end = func.end_pos[0]
+        if func_start <= end_line and func_end >= start_line:
+            functions_in_diff.append(func.get_code())  # Extracts full function code
 
-#     Returns:
-#         str: The full function code or None if not found.
-#     """
-    
-#     # Extract the starting line from the code diff header
-#     starting_line = get_code_diff_start_line(code_diff_header)
-#     if starting_line is None:
-#         return None
+    return ("\n\n").join(functions_in_diff)
 
-#     # Split the file content into lines
-#     lines = file_content.splitlines()
-
-#     if language == "python":
-#         return extract_python_function(lines, starting_line)
-#     elif language in {"java", "javascript", "c++", "c", "golang"}:
-#         return extract_c_like_function(lines, starting_line, language)
-    
-#     return None
 
 def extract_function_from_full_content(code: str, diff_start_line: int, diff_end_line: int, language: str):
     # Initialize the tree-sitter parser as before
     parser = tree_sitter.Parser()
-    tree_sitter_language = LANGUAGE_MAP.get(language.lower())
-    if not tree_sitter_language:
-        raise ValueError(f"Unsupported language: {language}")
-    
+    tree_sitter_language = LANGUAGE_MAP.get(language)
+    if tree_sitter_language is None:
+        print("Language could not be loaded.")
+        return None
+    else:
+        print("Language loaded successfully.")
+
+    parser.set_language(tree_sitter_language)
+
+    # Parse the cpp code
     try:
         tree = parser.parse(bytes(code, "utf8"))
     except Exception as e:
         print(f"Parsing failed for: \n{code}\n")
         print(f"Error:\n{e}")
-        return None   
-    
+        if language == "python":
+            return extract_python_functions_using_parso(code, diff_start_line, diff_end_line)
+        return None
+
     root_node = tree.root_node
-    functions = []
-    capture = False
 
-    for node in root_node.children:
-        if node.type == 'function_declaration':
-            start_line = node.start_point[0] + 1
-            end_line = node.end_point[0] + 1
+    # Split the code into lines for extracting function code
+    code_lines = code.splitlines()
+    functions_in_diff = []
+    function_markers = ["function", "function_declaration", "method_declaration", "function_definition"]
+    # Traverse the tree to find functions
+    def find_functions(node):
+        # Check if node is a function
+        if node.type in function_markers:
+            func_start = node.start_point[0] + 1  # Convert to 1-based line numbers
+            func_end = node.end_point[0] + 1
 
-            # Start capturing when a function overlaps with the start of the diff
-            if end_line >= diff_start_line and not capture:
-                capture = True
+            # Check if function overlaps with the specified line range
+            if func_start <= diff_end_line and func_end >= diff_start_line:
+                # Extract the function code using line range
+                function_code = "\n".join(code_lines[func_start - 1:func_end])
+                functions_in_diff.append(function_code)
 
-            # If capturing, append the function code
-            if capture:
-                function_code = code.splitlines()[start_line-1:end_line]
-                functions.append('\n'.join(function_code))
+        # Recursively visit each child node
+        for child in node.children:
+            if node.type not in function_markers:
+                find_functions(child)
+            
+    find_functions(root_node)
 
-            # Stop capturing after the last overlapping function with diff_end_line
-            if capture and start_line > diff_end_line:
-                break
-
-    return ("\n\n").join(functions)
+    return ("\n\n").join(functions_in_diff)
 
 
 def get_code_diff_start_line(code_diff_header: str) -> Union[int, None]:
