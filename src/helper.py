@@ -3,6 +3,10 @@ import re
 import os
 import json
 import csv
+from language_parser import LANGUAGE_MAP
+from typing import Union
+import tree_sitter
+import parso
 
 def get_repo_names_from_file(filename):
     df = pd.read_excel(filename, sheet_name='Result 1')
@@ -90,16 +94,147 @@ def has_allowed_extensions(filepath, allowed_extensions):
 
 def detect_lang_from_extension(filepath):
     extension = os.path.splitext(os.path.basename(filepath))[1].lower()
+    extension_to_lang = {".py": "python", ".cpp": "cpp", ".c": "c", ".java": "java", ".js": "javascript", ".go": "golang"}
 
-    if extension == ".py":
-        return "python"
-    elif extension == ".cpp":
-        return "cpp"
-    elif extension == ".c":
-        return "c"
-    elif extension == ".java":
-        return "java"
-    elif extension == ".js":
-        return "javascript"
-    elif extension == ".go":
-        return "golang"
+    return extension_to_lang.get(extension, None)
+
+
+# Using parso
+def extract_python_functions_using_parso(code, start_line, end_line):
+    tree = parso.parse(code)
+    functions_in_diff = []
+
+    for func in tree.iter_funcdefs():
+        func_start = func.start_pos[0]
+        func_end = func.end_pos[0]
+        if func_start <= end_line and func_end >= start_line:
+            functions_in_diff.append(func.get_code())  # Extracts full function code
+
+    return ("\n\n").join(functions_in_diff)
+
+
+def extract_function_from_full_content(code: str, diff_start_line: int, diff_end_line: int, language: str):
+    # Initialize the tree-sitter parser as before
+    parser = tree_sitter.Parser()
+    tree_sitter_language = LANGUAGE_MAP.get(language)
+    if tree_sitter_language is None:
+        print("Language could not be loaded.")
+        return None
+    else:
+        print("Language loaded successfully.")
+
+    parser.set_language(tree_sitter_language)
+
+    # Parse the cpp code
+    try:
+        tree = parser.parse(bytes(code, "utf8"))
+    except Exception as e:
+        print(f"Parsing failed for: \n{code}\n")
+        print(f"Error:\n{e}")
+        if language == "python":
+            return extract_python_functions_using_parso(code, diff_start_line, diff_end_line)
+        return None
+
+    root_node = tree.root_node
+
+    # Split the code into lines for extracting function code
+    code_lines = code.splitlines()
+    functions_in_diff = []
+    function_markers = ["function", "function_declaration", "method_declaration", "function_definition"]
+    # Traverse the tree to find functions
+    def find_functions(node):
+        # Check if node is a function
+        if node.type in function_markers:
+            func_start = node.start_point[0] + 1  # Convert to 1-based line numbers
+            func_end = node.end_point[0] + 1
+
+            # Check if function overlaps with the specified line range
+            if func_start <= diff_end_line and func_end >= diff_start_line:
+                # Extract the function code using line range
+                function_code = "\n".join(code_lines[func_start - 1:func_end])
+                functions_in_diff.append(function_code)
+
+        # Recursively visit each child node
+        for child in node.children:
+            if node.type not in function_markers:
+                find_functions(child)
+            
+    find_functions(root_node)
+
+    return ("\n\n").join(functions_in_diff)
+
+
+def get_code_diff_start_line(code_diff_header: str) -> Union[int, None]:
+    """Extracts the starting line number from the code diff header."""
+    match = re.match(r'@@ -\d+,\d+ \+(\d+),\d+ @@', code_diff_header)
+    if match:
+        return int(match.group(1))  # Returns the starting line in the "new" version of the file
+    return None
+
+# def extract_python_function(lines: list, starting_line: int) -> Union[str, None]:
+#     """
+#     Extracts the entire function code for Python using the AST module.
+
+#     Args:
+#         lines (list): The lines of code in the file.
+#         starting_line (int): The starting line number.
+
+#     Returns:
+#         str: The full function code or None if not found.
+#     """
+#     # Combine lines into a single string
+#     full_code = "\n".join(lines)
+#     # Parse the code into an AST
+#     tree = ast.parse(full_code)
+    
+#     # Iterate over the functions in the AST
+#     for node in ast.walk(tree):
+#         if isinstance(node, ast.FunctionDef):
+#             # Get the line number of the function definition
+#             if node.lineno == starting_line:
+#                 return ast.unparse(node)  # Get the full function code as a string
+
+#     return None
+
+# def extract_c_like_function(lines: list, starting_line: int, language: str) -> Union[str, None]:
+#     """
+#     Extracts the entire function code for C-like languages using regex.
+
+#     Args:
+#         lines (list): The lines of code in the file.
+#         starting_line (int): The starting line number.
+#         language (str): The programming language.
+
+#     Returns:
+#         str: The full function code or None if not found.
+#     """
+#     # Join the lines into a single string for regex processing
+#     content = "\n".join(lines)
+
+#     # Get the function pattern based on the language
+#     function_pattern = get_function_pattern(language)
+
+#     # Adjust the regex to properly capture function bodies
+#     # The pattern will capture everything between the first '{' and its corresponding '}'
+#     pattern = re.compile(rf'(?s)(?:{function_pattern})\s*\{{(.*?)\}}\s*$', re.MULTILINE | re.DOTALL)
+#     match = pattern.search(content)
+#     if match:
+#         return match.group(0)  # Return the entire function code
+
+#     return None
+
+# def get_function_pattern(language: str) -> str:
+#     """Returns the regex pattern for function extraction based on the programming language."""
+#     if language == "python":
+#         return r'^\s*def\s+\w+\s*\(.*\)\s*:'  # Python function definition
+#     elif language == "java":
+#         return r'\b(?:public|protected|private|static|final)?\s*[a-zA-Z_$][\w$<>]*\s+[a-zA-Z_$][\w$]*\s*\([^)]*\)\s*\{'  # Java
+#     elif language == "javascript":
+#         return r'\b(?:function|async\s*function|[\w$]+\s*=\s*function|[\w$]+\s*=\s*async\s*function)\s*\([^)]*\)\s*\{'  # JavaScript
+#     elif language == "c++":
+#         return r'\b(?:public|protected|private|virtual|static|inline|constexpr)?\s*[\w\s*]+[^\s]*\s+\w+\s*\([^)]*\)\s*\{'  # C++
+#     elif language == "c":
+#         return r'\b(?:void|[\w\s*]+[^\s]*?)\s+\w+\s*\([^)]*\)\s*\{'  # C
+#     elif language == "golang":
+#         return r'\bfunc\s+\w+\s*\([^)]*\)\s*\{'  # Go
+#     return ""
