@@ -9,6 +9,7 @@ import pickle
 from typing import List
 from logger import logger
 import time
+import git
 
 auth = None
 user = None
@@ -53,6 +54,7 @@ def fetch_approved_PRs_from_repo(repo_name: str):
         print("Approved PRs pickle not found: ", str(fe))
         approved_prs = []
 
+    monitor_rate_limit()
     pulls = repo.get_pulls(state='closed')  # Only closed PRs can be approved
     approved_prs = []
     print("No. of closed PRs in the repo: ", pulls.totalCount)
@@ -101,7 +103,7 @@ def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullReques
     i, approved_prs_count = 0, len(approved_prs)
 
     for pr in approved_prs:
-        monitor_rate_limit()
+        # monitor_rate_limit()
         i += 1
         repo = pr.base.repo
         pr_title = pr.title
@@ -111,6 +113,7 @@ def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullReques
         print(f"\n\nProcessing PR ({i}/{approved_prs_count}): {pr_title}")
 
         # Skip if there are no review comments
+        monitor_rate_limit()
         review_comments = pr.get_review_comments()
         if not review_comments.totalCount:
             continue
@@ -118,6 +121,7 @@ def collect_diffs_comments_and_commits(approved_prs: List[PullRequest.PullReques
         for review_comment in review_comments:
             commit_to_review_comment[review_comment.commit_id] = commit_to_review_comment.get(review_comment.commit_id, []) + [{"body": review_comment.body, "position": review_comment.position, "file_name": review_comment.path}]
 
+        monitor_rate_limit()
         commits = pr.get_commits()
         diffs_and_comments.extend(process_commits_in_pr(repo, commit_to_review_comment, pr_title, pr_number, review_comments, commits))
    
@@ -242,3 +246,13 @@ def extract_function_code(repo: Repository.Repository, file_path: str, commit_sh
         function_code = extract_function_from_full_content(full_content, code_diff_start_line, code_diff_end_line, language)
     
     return function_code
+
+def clone_repo_to_path(repo_name: str, repo_path: str):
+    if auth:
+        repo = auth.get_repo(repo_name)
+    else:
+        print("Failed to clone repo: auth is None")
+        return None
+    
+    git.Repo.clone_from(repo.clone_url, repo_path)
+    print(f"Repository '{repo_name}' cloned to {repo_path}")

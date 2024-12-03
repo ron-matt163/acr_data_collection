@@ -7,6 +7,8 @@ from language_parser import LANGUAGE_MAP
 from typing import Union
 import tree_sitter
 import parso
+import shutil
+import os
 
 def get_repo_names_from_file(filename):
     df = pd.read_excel(filename, sheet_name='Result 1')
@@ -238,3 +240,25 @@ def get_code_diff_start_line(code_diff_header: str) -> Union[int, None]:
 #     elif language == "golang":
 #         return r'\bfunc\s+\w+\s*\([^)]*\)\s*\{'  # Go
 #     return ""
+
+def empty_directory(directory_path):
+    for filename in os.listdir(directory_path):
+        file_path = os.path.join(directory_path, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)  # Remove file or symbolic link
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)  # Remove directory and its contents
+        except Exception as e:
+            print(f'Failed to delete {file_path}. Reason: {e}')
+
+def remove_file(file_path):
+    try:
+        os.remove(file_path)
+        print(f"{file_path} has been deleted successfully.")
+    except FileNotFoundError:
+        print(f"{file_path} does not exist.")
+    except PermissionError:
+        print(f"Permission denied: unable to delete {file_path}.")
+    except Exception as e:
+        print(f"An error occurred while deleting {file_path}: {e}")
