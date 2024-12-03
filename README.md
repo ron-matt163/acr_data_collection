@@ -1,7 +1,7 @@
-# Automated Code Reviewer
+# Automated Code Reviewer Data Collection
 This repository contains code to collect additional commit-related and function-related context for code review data from PRs.
 
-## Strategy followed for adding commit-related context:
+## Strategy followed for adding commit and function-related context:
 ### 1. Initialize Authentication
 
 - Use a GitHub access token to authenticate the application, ensuring access to the required data.
@@ -52,16 +52,21 @@ This repository contains code to collect additional commit-related and function-
 - For each code section, store the **commit message** from the associated commit. 
 - This provides context, linking specific changes to the rationale behind them.
 
-### 9. Store and Return the Collected Data
+### 9. Obtain surrounding function code context
+- The starting and ending lines of a code diff are used to determine the function within the code diff was found. If there is an overlap between the starting and ending line number of a function, and the starting and ending lines of a code diff, the function is added to the code diff's context. The function code is extracted using tree_sitter (a static program analysis library)
 
-- Compile all processed information, including code changes, comments, commit messages, and metadata, into a structured format.
+### 10. Obtain the code of the functions called within the code diff
+- The code of the functions called within the code diff (provided they are defined within the repo) is also added to the context.
+
+### 11. Store and Return the Collected Data
+- Compile all processed information, including code changes, comments, commit messages, function context and metadata, into a structured format.
 - This data is now ready for further analysis or reporting.
 
-### 10. Rate Limit Monitoring
-
+### 12. Rate Limit Monitoring
 - Check the GitHub API rate limit status before each API call.
   - If the rate limit is low, pause until it resets to avoid API errors.
 - This step ensures continuous data collection without interruption.
+
 
 ## How to run the data collection script?
 1. Create a ".env" file that stores your GitHub Access token:
@@ -69,6 +74,7 @@ This repository contains code to collect additional commit-related and function-
 GITHUB_ACCESS_TOKEN=<your token>
 ```
 2. Install dependencies by running `pip install -r requirements.txt`. *Run this inside a virtual environment (venv) to avoid breaking dependencies in your local system.*
-3. Go inside the src/ directory and run main.py (`cd src && python3 main.py`)
+3. Create a repositories/ directories using the command (`mkdir repositories`)
+4. Go inside the src/ directory and run main.py (`cd src && python3 main.py`)
 
 The list of repositories from which the data is going to be collected was obtained from https://github.com/aiopsplus/Carllm
